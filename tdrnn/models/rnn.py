@@ -27,7 +27,7 @@ class TDRNN:
             self.types_seq_one_hot = tf.one_hot(self.types_seq, self.process_dim)
 
             # EOS padding type is all zeros in the last dim of the tensor
-            self.seq_mask = tf.reduce_sum(self.types_seq_one_hot, axis=-1) > 0
+            self.seq_mask = tf.reduce_sum(self.types_seq_one_hot[:, 1:] , axis=-1) > 0
 
     def layer_joint_embedding(self, type_emb_seq, dt_seq, reuse=tf.AUTO_REUSE):
         with tf.variable_scope('layer_joint_embedding', reuse=reuse):
@@ -68,6 +68,25 @@ class TDRNN:
         # (batch_size, max_len, process_dim)
         return pred_type_logits
 
+    def compute_type_loss(self, pred_type_logits):
+        # (batch_size, max_len - 1)
+        pred_type_logits = pred_type_logits[:, 1:]
+
+        # (batch_size, max_len - 1)
+        type_label = self.types_seq_one_hot[:, 1:]
+
+        # (batch_size, max_len - 1)
+        cross_entropy = tf.reduce_sum(- tf.log(pred_type_logits) * type_label, axis=-1)
+
+        type_loss = tf.reduce_sum(tf.boolean_mask(cross_entropy, self.seq_mask))
+
+        return type_loss
+
+
+    def compute_time_loss(self):
+
+        return
+
     def forward(self):
         # (batch_size, max_len, emb_dim)
         types_seq_emb = self.layer_embedding(self.types_seq)
@@ -76,9 +95,13 @@ class TDRNN:
         joint_emb = self.layer_joint_embedding(types_seq_emb, self.dtimes_seq)
 
         # (batch_size, max_len, rnn_dim)
-        rnn_outputs = self.layer_sequence_flow(joint_emb)
+        pred_type_logits = self.layer_sequence_flow(joint_emb)
 
-        return
+        loss = self.compute_type_loss(pred_type_logits) + self.compute_time_loss(pred_type_logits)
+
+        num_event = tf.reduce_sum(self.len_seq)
+
+        return loss, num_event
 
     def predict(self):
         return
