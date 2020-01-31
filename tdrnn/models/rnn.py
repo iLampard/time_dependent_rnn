@@ -17,7 +17,9 @@ class TDRNN:
         with tf.variable_scope('TDRNN'):
             self.types_seq = tf.placeholder(tf.int32, shape=[None, None])
             self.dtimes_seq = tf.placeholder(tf.float32, shape=[None, None])
-            self.len_seq = tf.placeholder(tf.float32, shape=[None, 1])
+
+            # (batch_size, max_len, 1)
+            self.dtimes_seq_ = tf.expand_dims(self.dtimes_seq, axis=-1)
 
             self.learning_rate = tf.placeholder(tf.float32)
             self.is_training = tf.placeholder(tf.bool)
@@ -108,7 +110,7 @@ class TDRNN:
         # (batch_size, max_len - 1)
         cross_entropy = tf.reduce_sum(- tf.log(pred_type_logits) * type_label, axis=-1)
 
-        type_loss = tf.reduce_sum(tf.boolean_mask(cross_entropy, self.seq_mask))
+        type_loss = tf.reduce_mean(tf.boolean_mask(cross_entropy, self.seq_mask))
 
         return type_loss
 
@@ -117,12 +119,10 @@ class TDRNN:
         with tf.variable_scope('compute_time_loss', reuse=reuse):
             layer_duration_proj = layers.Dense(self.duration_proj_dim)
 
-            layer_duration_embedding = layers.Dense(self.emb_dim)
-
         with tf.name_scope('compute_time_loss'):
             # (batch_size, max_len, 1)
             pred_dtimes = pred_dtimes[:, 1:]
-            true_dtimes = self.dtimes_seq[:, :-1]
+            true_dtimes = self.dtimes_seq_[:, :-1]
 
             # Equation (4)
             # (batch_size, max_len, dt_proj_dim)
@@ -137,7 +137,7 @@ class TDRNN:
             # (batch_size, max_len - 1)
             cross_entropy = tf.reduce_sum(- tf.log(pred_proj) * true_proj, axis=-1)
 
-            time_loss = tf.reduce_sum(tf.boolean_mask(cross_entropy, self.seq_mask))
+            time_loss = tf.reduce_mean(tf.boolean_mask(cross_entropy, self.seq_mask))
 
         return time_loss
 
@@ -146,7 +146,7 @@ class TDRNN:
         types_seq_emb = self.layer_embedding(self.types_seq)
 
         # (batch_size, max_len, emb_dim)
-        joint_emb = self.layer_joint_embedding(types_seq_emb, self.dtimes_seq)
+        joint_emb = self.layer_joint_embedding(types_seq_emb, self.dtimes_seq_)
 
         # (batch_size, max_len, rnn_dim)
         rnn_outputs = self.layer_sequence_flow(joint_emb)
@@ -163,6 +163,34 @@ class TDRNN:
         """ Compute type loss and time loss  """
         loss = self.compute_type_loss(pred_type_logits) + self.compute_time_loss(pred_dtimes)
 
-        num_event = tf.reduce_sum(self.len_seq)
+        num_event = tf.reduce_sum(tf.boolean_mask(tf.ones_like(self.types_seq[:, 1:]), self.seq_mask))
 
         return loss, num_event
+
+    def train(self, sess, batch_data, lr):
+        event_types, event_dtimes = batch_data
+        fd = {self.types_seq: event_types,
+              self.dtimes_seq: event_dtimes,
+              self.is_training: True,
+              self.learning_rate: lr}
+
+        _, loss, num_event, pred_type, pred_dtime = sess.run([self.train_op,
+                                                              self.loss,
+                                                              self.num_event,
+                                                              self.type_prediction,
+                                                              self.time_prediction],
+                                                             feed_dict=fd)
+        return loss / num_event, [pred_type, pred_dtime]
+
+    def predict(self, sess, batch_data):
+        event_types, event_dtimes = batch_data
+        fd = {self.types_seq: event_types,
+              self.dtimes_seq: event_dtimes,
+              self.is_training: False}
+
+        loss, num_event, pred_type, pred_dtime = sess.run([self.loss,
+                                                           self.num_event,
+                                                           self.type_prediction,
+                                                           self.time_prediction],
+                                                          feed_dict=fd)
+        return loss / num_event, [pred_type, pred_dtime]

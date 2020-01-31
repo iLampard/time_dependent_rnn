@@ -1,6 +1,7 @@
 import numpy as np
 import pickle
 from tdrnn.scalers import ZeroMaxScaler
+from tdrnn.data_provider import DataProvider
 
 
 class BaseLoader:
@@ -13,13 +14,11 @@ class BaseLoader:
                         batch_size,
                         scale_range):
         dtime_scaler = ZeroMaxScaler(scale_range)
-        marked_scaler = ZeroMaxScaler(scale_range)
 
         data_provider = DataProvider(event_num=self.event_num,
                                      event_times_seq=data_dict['timestamps'],
                                      event_types_seq=data_dict['types'],
                                      dtime_scaler=dtime_scaler,
-                                     marked_target_scaler=marked_scaler,
                                      batch_size=batch_size)
 
         return data_provider.gen_data_set()
@@ -80,7 +79,7 @@ class BaseLoader:
             start_idx = end_idx
         return all_datas
 
-    def process_datafile(self, load_idx):
+    def process_datafile(self):
         examples_ds = None
         event_num = None
         train_data = examples_ds
@@ -99,13 +98,13 @@ class BaseLoader:
 class SoLoader(BaseLoader):
     name = 'data_so'
 
-    def process_datafile(self, load_idx):
+    def process_datafile(self):
         file = 'data/{}/{}.pkl'
 
         train_data = self.load_pickle(file.format(self.name, 'train'))
         print('Train dataset:', len(train_data['types']))
 
-        valid_data = self.load_pickle(file.format(self.name, 'dev'))
+        valid_data = self.load_pickle(file.format(self.name, 'valid'))
         print('Valid dataset:', len(valid_data['types']))
 
         test_data = self.load_pickle(file.format(self.name, 'test'))
