@@ -107,7 +107,7 @@ class ModelRunner:
 
         logging.info('Evaluation finished')
 
-        return
+        return metrics_dict
 
     def run_one_epoch(self, dataset, phase, lr=None):
         """ Run one complete epoch """

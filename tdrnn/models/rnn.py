@@ -11,7 +11,7 @@ class TDRNN:
         self.process_dim = process_dim
         self.emb_dim = emb_dim
         self.rnn_dim = rnn_dim
-        self.duration_proj_dim = kwargs.get('duration_proj_dim', 32)
+        self.duration_proj_dim = kwargs.get('duration_proj_dim', 30)
 
     def build(self):
         with tf.variable_scope('TDRNN'):

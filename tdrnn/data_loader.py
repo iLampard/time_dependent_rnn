@@ -1,6 +1,6 @@
 import numpy as np
 import pickle
-from tdrnn.scalers import ZeroMaxScaler
+from tdrnn.scalers import ZeroMaxScaler, BaseScaler
 from tdrnn.data_provider import DataProvider
 
 
@@ -13,7 +13,7 @@ class BaseLoader:
                         data_dict,
                         batch_size,
                         scale_range):
-        dtime_scaler = ZeroMaxScaler(scale_range)
+        dtime_scaler = BaseScaler(scale_range)
 
         data_provider = DataProvider(event_num=self.event_num,
                                      event_times_seq=data_dict['timestamps'],

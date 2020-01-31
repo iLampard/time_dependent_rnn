@@ -67,4 +67,4 @@ class HawkesMetrics:
 
     @staticmethod
     def accuracy(pred, label):
-        return np.mean(pred == label)
+        return np.mean(np.array(pred) == np.array(label))
