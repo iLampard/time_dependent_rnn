@@ -45,9 +45,9 @@ where the path can be found in the log which shows the relative dir to save the 
 
 and then open the browser
 
-<img src="https://github.com/iLampard/time_dependent_rnn/blob/master/figures/loss.png"/>
+<img src="https://github.com/iLampard/time_dependent_rnn/tree/master/figures/loss.png"/>
 
-<img src="https://github.com/iLampard/time_dependent_rnn/blob/master/figures/acc.png"/>
+<img src="https://github.com/iLampard/time_dependent_rnn/tree/master/figures/acc.png"/>
 
 
 ## Requirement
