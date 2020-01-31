@@ -29,9 +29,22 @@ class TDRNN:
             # EOS padding type is all zeros in the last dim of the tensor
             self.seq_mask = tf.reduce_sum(self.types_seq_one_hot[:, 1:], axis=-1) > 0
 
+            pred_type_logits, pred_dtimes = self.forward()
+
+            self.loss, self.num_event = self.compute_all_loss(pred_type_logits, pred_dtimes)
+
+            optimizer = tf.train.AdamOptimizer(self.learning_rate)
+
+            opt_op = optimizer.minimize(self.loss)
+
+            update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+
+            self.train_op = tf.group([opt_op, update_ops])
+
             self.type_prediction = tf.argmax(pred_type_logits, axis=-1)
 
-            self.time_prediction = pred_times
+            # (batch_size, max_len - 1)
+            self.time_prediction = tf.squeeze(pred_dtimes, axis=-1)
 
     def layer_joint_embedding(self, type_emb_seq, dt_seq, reuse=tf.AUTO_REUSE):
         with tf.variable_scope('layer_joint_embedding', reuse=reuse):
@@ -40,12 +53,15 @@ class TDRNN:
             layer_duration_embedding = layers.Dense(self.emb_dim)
 
         with tf.name_scope('layer_joint_embedding'):
+            # Equation (4)
             # (batch_size, max_len, dt_proj_dim)
             dt_proj = layer_duration_proj(dt_seq)
 
+            # Equation (5)
             # (batch_size, max_len, dt_proj_dim)
             dt_proj = tf.nn.softmax(dt_proj, axis=-1)
 
+            # Equation (6)
             # (batch_size, max_len, emb_dim)
             dt_emb = layer_duration_embedding(dt_proj)
 
@@ -82,6 +98,7 @@ class TDRNN:
         return pred_dtimes
 
     def compute_type_loss(self, pred_type_logits):
+        """ x-entropy type loss  """
         # (batch_size, max_len - 1)
         pred_type_logits = pred_type_logits[:, :-1]
 
@@ -95,23 +112,34 @@ class TDRNN:
 
         return type_loss
 
-    def compute_time_loss(self, pred_type_logits, reuse=tf.AUTO_REUSE):
+    def compute_time_loss(self, pred_dtimes, reuse=tf.AUTO_REUSE):
+        """ x-entropy time loss - equation (9) """
         with tf.variable_scope('compute_time_loss', reuse=reuse):
             layer_duration_proj = layers.Dense(self.duration_proj_dim)
 
             layer_duration_embedding = layers.Dense(self.emb_dim)
 
         with tf.name_scope('compute_time_loss'):
+            # (batch_size, max_len, 1)
+            pred_dtimes = pred_dtimes[:, 1:]
+            true_dtimes = self.dtimes_seq[:, :-1]
+
+            # Equation (4)
+            # (batch_size, max_len, dt_proj_dim)
+            pred_proj = layer_duration_proj(pred_dtimes)
+            true_proj = layer_duration_proj(true_dtimes)
+
+            # Equation (5)
+            # (batch_size, max_len, dt_proj_dim)
+            pred_proj = tf.nn.softmax(pred_proj, axis=-1)
+            true_proj = tf.nn.softmax(true_proj, axis=-1)
+
             # (batch_size, max_len - 1)
-            pred_type_logits = pred_type_logits[:, :-1]
+            cross_entropy = tf.reduce_sum(- tf.log(pred_proj) * true_proj, axis=-1)
 
-            # (batch_size, max_len, dt_proj_dim)
-            dt_proj = layer_duration_proj(pred_type_logits)
+            time_loss = tf.reduce_sum(tf.boolean_mask(cross_entropy, self.seq_mask))
 
-            # (batch_size, max_len, dt_proj_dim)
-            dt_proj = tf.nn.softmax(dt_proj, axis=-1)
-
-        return
+        return time_loss
 
     def forward(self):
         # (batch_size, max_len, emb_dim)
@@ -131,9 +159,10 @@ class TDRNN:
 
         return pred_type_logits, pred_dtimes
 
-    def compute_all_loss(self, pred_type_logits):
-        loss = self.compute_type_loss(pred_type_logits) + self.compute_time_loss(pred_type_logits)
+    def compute_all_loss(self, pred_type_logits, pred_dtimes):
+        """ Compute type loss and time loss  """
+        loss = self.compute_type_loss(pred_type_logits) + self.compute_time_loss(pred_dtimes)
 
         num_event = tf.reduce_sum(self.len_seq)
 
-        return
+        return loss, num_event
