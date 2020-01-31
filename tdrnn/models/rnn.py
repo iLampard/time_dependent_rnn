@@ -27,7 +27,11 @@ class TDRNN:
             self.types_seq_one_hot = tf.one_hot(self.types_seq, self.process_dim)
 
             # EOS padding type is all zeros in the last dim of the tensor
-            self.seq_mask = tf.reduce_sum(self.types_seq_one_hot[:, 1:] , axis=-1) > 0
+            self.seq_mask = tf.reduce_sum(self.types_seq_one_hot[:, 1:], axis=-1) > 0
+
+            self.type_prediction = tf.argmax(pred_type_logits, axis=-1)
+
+            self.time_prediction = pred_times
 
     def layer_joint_embedding(self, type_emb_seq, dt_seq, reuse=tf.AUTO_REUSE):
         with tf.variable_scope('layer_joint_embedding', reuse=reuse):
@@ -58,19 +62,28 @@ class TDRNN:
             res = rnn_layer(inputs)
         return res[0]
 
-    def layer_output(self, inputs, reuse=tf.AUTO_REUSE):
-        with tf.variable_scope('layer_output', reuse=reuse):
+    def layer_logits_output(self, inputs, reuse=tf.AUTO_REUSE):
+        with tf.variable_scope('layer_logits_output', reuse=reuse):
             type_inference_layer = layers.Dense(self.process_dim, activation=tf.nn.softplus)
-        with tf.name_scope('layer_output'):
+        with tf.name_scope('layer_logits_output'):
             pred_type_logits = type_inference_layer(inputs)
             pred_type_logits = tf.nn.softmax(pred_type_logits, axis=-1) + 1e-8
 
         # (batch_size, max_len, process_dim)
         return pred_type_logits
 
+    def layer_dtimes_output(self, inputs, reuse=tf.AUTO_REUSE):
+        with tf.variable_scope('layer_dtimes_output', reuse=reuse):
+            dtimes_inference_layer = layers.Dense(1, activation=tf.nn.softplus)
+        with tf.name_scope('layer_dtimes_output'):
+            pred_dtimes = dtimes_inference_layer(inputs)
+
+        # (batch_size, max_len, process_dim)
+        return pred_dtimes
+
     def compute_type_loss(self, pred_type_logits):
         # (batch_size, max_len - 1)
-        pred_type_logits = pred_type_logits[:, 1:]
+        pred_type_logits = pred_type_logits[:, :-1]
 
         # (batch_size, max_len - 1)
         type_label = self.types_seq_one_hot[:, 1:]
@@ -82,8 +95,21 @@ class TDRNN:
 
         return type_loss
 
+    def compute_time_loss(self, pred_type_logits, reuse=tf.AUTO_REUSE):
+        with tf.variable_scope('compute_time_loss', reuse=reuse):
+            layer_duration_proj = layers.Dense(self.duration_proj_dim)
 
-    def compute_time_loss(self):
+            layer_duration_embedding = layers.Dense(self.emb_dim)
+
+        with tf.name_scope('compute_time_loss'):
+            # (batch_size, max_len - 1)
+            pred_type_logits = pred_type_logits[:, :-1]
+
+            # (batch_size, max_len, dt_proj_dim)
+            dt_proj = layer_duration_proj(pred_type_logits)
+
+            # (batch_size, max_len, dt_proj_dim)
+            dt_proj = tf.nn.softmax(dt_proj, axis=-1)
 
         return
 
@@ -95,13 +121,19 @@ class TDRNN:
         joint_emb = self.layer_joint_embedding(types_seq_emb, self.dtimes_seq)
 
         # (batch_size, max_len, rnn_dim)
-        pred_type_logits = self.layer_sequence_flow(joint_emb)
+        rnn_outputs = self.layer_sequence_flow(joint_emb)
 
+        # (batch_size, max_len, process_dim)
+        pred_type_logits = self.layer_logits_output(rnn_outputs)
+
+        # (batch_size, max_len, 1)
+        pred_dtimes = self.layer_dtimes_output(rnn_outputs)
+
+        return pred_type_logits, pred_dtimes
+
+    def compute_all_loss(self, pred_type_logits):
         loss = self.compute_type_loss(pred_type_logits) + self.compute_time_loss(pred_type_logits)
 
         num_event = tf.reduce_sum(self.len_seq)
 
-        return loss, num_event
-
-    def predict(self):
         return
