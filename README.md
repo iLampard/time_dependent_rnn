@@ -24,7 +24,7 @@ Please be noted that these data is preprocessed by my own and not exactly the sa
 
 ### Run the training and prediction pipeline
 
-Suppose we want to run 100 epochs and use Tensorboard to visualize the process
+Suppose we want to run 200 epochs and use Tensorboard to visualize the process
 
 ```bash
 cd tdrnn
