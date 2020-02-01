@@ -14,7 +14,7 @@ put them under *tdrnn/data/data_so*.
 tdrnn
  |__ data
        |__ data_so
-            |__ dev.pkl
+            |__ valid.pkl
             |__ test.pkl
             |__ train.pkl
 ```
