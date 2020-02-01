@@ -180,7 +180,7 @@ class TDRNN:
                                                               self.type_prediction,
                                                               self.time_prediction],
                                                              feed_dict=fd)
-        return loss / num_event, [pred_type, pred_dtime]
+        return loss, [pred_type, pred_dtime]
 
     def predict(self, sess, batch_data):
         event_types, event_dtimes = batch_data
@@ -193,4 +193,4 @@ class TDRNN:
                                                            self.type_prediction,
                                                            self.time_prediction],
                                                           feed_dict=fd)
-        return loss / num_event, [pred_type, pred_dtime]
+        return loss, [pred_type, pred_dtime]
